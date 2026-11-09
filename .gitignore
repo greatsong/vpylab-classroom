@@ -26,3 +26,6 @@ scripts/compat/out/preprocessed.json
 scripts/compat/out/merged.json
 scripts/compat/out/*.partial.json
 .gstack/
+
+# Cloudflare wrangler 로컬 상태
+.wrangler/
