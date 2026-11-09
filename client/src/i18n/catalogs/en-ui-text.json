@@ -1702,5 +1702,12 @@
   "만두 친구": "Dumpling friend",
   "손전등 친구": "Flashlight friend",
   "공구상자 친구": "Toolbox friend",
-  "크기": "Size"
+  "크기": "Size",
+  "이 브라우저는 화면 녹화를 지원하지 않습니다.": "This browser does not support screen recording.",
+  "화면 녹화를 시작하지 못했습니다.": "Recording could not start.",
+  "화면과 소리를 녹화합니다. 최대 {0}초이며 녹화 끝내기를 누르면 영상 파일로 저장됩니다.": "Recording the scene and sound. Up to {0} seconds; press Finish recording to save a video file.",
+  "영상을 저장했습니다. ({0}초)": "Video saved. ({0}s)",
+  "영상을 저장하지 못했습니다. 다시 녹화해 주세요.": "The video could not be saved. Please record again.",
+  "영상으로 저장 (최대 {0}초)": "Save as video (up to {0}s)",
+  "녹화 끝내기 ({0}초)": "Finish recording ({0}s)"
 }

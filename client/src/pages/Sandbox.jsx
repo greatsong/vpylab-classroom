@@ -16,7 +16,8 @@ import usePyodide from '../hooks/usePyodide';
 import { getStatus as getPythonStatus } from '../engine/pyodide-singleton';
 import { processBatch, clearScene } from '../engine/vpython-bridge';
 import { clearRegistry } from '../engine/object-registry';
-import { runSound, errorSound, stopBgm, stopAllSounds, initAudioOnUserGesture, isAudioUnlocked, isTouchPlaybackEnvironment, resumeAndRun } from '../engine/sound-system';
+import { runSound, errorSound, stopBgm, stopAllSounds, initAudioOnUserGesture, isAudioUnlocked, isTouchPlaybackEnvironment, resumeAndRun, openRecordingAudioStream } from '../engine/sound-system';
+import { MAX_RECORDING_SECONDS, canRecordCanvas, startCanvasRecording, downloadRecording } from '../engine/video-recorder';
 import { captureThumbnail } from '../engine/thumbnail';
 import { createShareLink, decodeCodeFromURL } from '../utils/share';
 import ShareLinkDialog from '../components/share/ShareLinkDialog';
@@ -119,6 +120,8 @@ export default function Sandbox() {
   const [remixInfo, setRemixInfo] = useState(null);
   const [editMode, setEditMode] = useState(null); // { id, githubRepo, title }
   const [theaterMode, setTheaterMode] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(null); // 녹화 중이면 지난 시간(초), 아니면 null
+  const recordingRef = useRef(null);
   const [theaterWaiting, setTheaterWaiting] = useState(false); // 클릭 대기 중
   const [playStartRequired, setPlayStartRequired] = useState(false);
   const [repoLoadStatus, setRepoLoadStatus] = useState(null); // 'loading' | 'error' | null
@@ -854,6 +857,44 @@ export default function Sandbox() {
     setShareDialog({ url, id: url.slice(url.lastIndexOf('/s/') + 3), title });
   };
 
+  // 작품 영상 내보내기: 3D 화면과 소리를 이 브라우저 안에서 녹화해 파일로 내려받습니다.
+  const handleStopRecording = useCallback(() => recordingRef.current?.stop(), []);
+  const handleStartRecording = useCallback(async () => {
+    if (recordingRef.current) return;
+    const canvas = sceneRef.current?._renderer?.domElement;
+    if (!canRecordCanvas(canvas)) {
+      addOutput(ui("이 브라우저는 화면 녹화를 지원하지 않습니다."), 'error');
+      return;
+    }
+    let recording;
+    try {
+      recording = startCanvasRecording(canvas, { audio: openRecordingAudioStream(), onTick: setRecordingSeconds });
+    } catch {
+      addOutput(ui("화면 녹화를 시작하지 못했습니다."), 'error');
+      return;
+    }
+    recordingRef.current = recording;
+    setRecordingSeconds(0);
+    addOutput(ui`화면과 소리를 녹화합니다. 최대 ${MAX_RECORDING_SECONDS}초이며 녹화 끝내기를 누르면 영상 파일로 저장됩니다.`, 'info');
+    try {
+      const result = await recording.finished;
+      if (result) {
+        const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '');
+        downloadRecording(result.blob, `vpylab_${stamp}.${result.extension}`);
+        addOutput(ui`영상을 저장했습니다. (${result.seconds}초)`, 'success');
+      }
+    } catch {
+      addOutput(ui("영상을 저장하지 못했습니다. 다시 녹화해 주세요."), 'error');
+    } finally {
+      if (recordingRef.current === recording) {
+        recordingRef.current = null;
+        setRecordingSeconds(null);
+      }
+    }
+  }, [addOutput, ui]);
+  // 화면을 떠나면 녹화를 버립니다.
+  useEffect(() => () => recordingRef.current?.cancel(), []);
+
   const handleExport = async () => {
     const { generateStandaloneHTML, downloadHTML } = await import('../utils/export-html');
     const html = generateStandaloneHTML(codeRef.current, 'My VPyLab Project');
@@ -1223,6 +1264,7 @@ export default function Sandbox() {
       <div className="flex flex-wrap items-center gap-2 shrink-0 px-4 py-3 border-b" style={{ backgroundColor: 'var(--color-bg-panel)', borderColor: 'var(--color-border)' }}>
         <button onClick={handleRun} disabled={!isReady || isRunning || repoLoadStatus === 'loading'} className="toolbar-btn --run">{repoLoadStatus === 'loading' ? ui("불러오는 중") : t('editor.run')}</button>
         {(isRunning||audio.playing) && <button onClick={handleStop} className="toolbar-btn --stop">{t('editor.stop')}</button>}
+        {recordingSeconds !== null && <button onClick={handleStopRecording} className="toolbar-btn" aria-live="polite" style={{ color: 'var(--color-error)' }}>● {ui`녹화 끝내기 (${recordingSeconds}초)`}</button>}
         <button onClick={handleSave} disabled={!activeProjectCanEdit} className="toolbar-btn" title={ui("현재 코드 저장 (Ctrl/Cmd+S)")}>{activeProjectRole === 'viewer' ? ui("보기 전용") : (saveMsg || ui("저장"))}</button>
         <button onClick={() => { setTeamInitialAction('browse'); setShowTeam(true); }} className="toolbar-btn max-w-36 truncate" title={activeProject?.title || ui("프로젝트")}>{activeProject ? activeProject.title : ui("프로젝트")}</button>
         <div className="relative">
@@ -1235,6 +1277,7 @@ export default function Sandbox() {
                 { label: ui("초기 코드로 돌아가기"), action: handleReset },
                 { label: shareMsg || t('editor.share'), action: handleShare },
                 { label: ui("HTML 내려받기"), action: handleExport },
+                ...(recordingSeconds === null ? [{ label: ui`영상으로 저장 (최대 ${MAX_RECORDING_SECONDS}초)`, action: handleStartRecording }] : []),
                 { label: t('code.saveAs') || ui("다른 이름으로 저장"), action: handleSaveAs },
                 { label: ui("저장 이력"), action: handleOpenHistory },
                 { label: t('editor.examples'), action: () => setShowExamples(true) },
